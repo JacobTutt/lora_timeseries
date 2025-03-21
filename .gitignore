@@ -1,0 +1,8 @@
+Archive/
+M2_CW_Venv/
+.DS_Store
+*/__pycache__
+
+venvs/
+
+ 
