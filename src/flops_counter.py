@@ -8,6 +8,8 @@ flops_cost_division = 1
 flops_cost_exponentiation = 10
 flops_cost_sqrt = 10
 
+budget = 1e17
+
 
 # I first outline the flops in each section of the QWEN (+ Lora) model
 # Later functions pool all of these functions together and calculate the total flops for the model
@@ -606,6 +608,8 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
         
         # Overall total across all FLOPs
         print(f"\n{'Overall Total FLOPs:':<35} {total_forward_pass:.5g}")
+        # print percentage of flops budget
+        print(f"{'Percentage of Total FLOPs Budget:':<35} {total_forward_pass / budget *100:.5g} %")
 
     total_lora = single_layer_lora_total * num_layers
 
@@ -663,6 +667,8 @@ def model_generation_flops(tokens_given, tokens_generated, lora_ranks, randomnes
 
     print (f"Total FLOPs for generating {tokens_generated} tokens: {total_flops:.5g}")
     print (f"Total FLOPs from LoRA adaptation: {total_lora_flops:.5g}")
+     # print percentage of flops budget
+    print(f"{'Percentage of Total FLOPs Budget:':<35} {total_flops / budget *100:.5g} %")
     
     return total_flops, total_lora_flops
 
@@ -716,6 +722,8 @@ def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training):
 
     print (f"Total FLOPs for training: {training_flops:.5g}")
     print (f"Total FLOPs from LoRA adaptation: {training_lora_flops:.5g}")
+     # print percentage of flops budget
+    print(f"{'Percentage of Total FLOPs Budget:':<35} {training_flops / budget *100:.5g} %")
 
     return training_flops, training_lora_flops
 
@@ -759,6 +767,8 @@ def model_evaluation_flops(no_tokens, lora_ranks, batch_size):
 
     print (f"Total FLOPs for evaluation: {evaluation_flops:.5g}")
     print (f"Total FLOPs from LoRA adaptation: {evaluation_lora_flops:.5g}")
+     # print percentage of flops budget
+    print(f"{'Percentage of Total FLOPs Budget:':<35} {evaluation_flops / budget * 100:.5g} %")
 
     return evaluation_flops, evaluation_lora_flops
     
