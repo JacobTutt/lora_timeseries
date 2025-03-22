@@ -4,7 +4,7 @@ import h5py
 import logging 
 logging.basicConfig(level=logging.INFO,  format="%(levelname)s - %(message)s",  datefmt="%H:%M:%S")
 
-def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, split_fraction =0.8 , shuffle = False, tokeniser_model = None):
+def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, train_fraction =0.7, validation_fraction= 0.15 , shuffle = False, tokeniser_model = None):
     """
     Preprocesses predator-prey time series data from an HDF5 file by:
     1. Loading the data and verifying required fields.
@@ -33,6 +33,9 @@ def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, split_fra
     ValueError
         If the dimensions of prey, predator, and time data do not match.
     """
+    if train_fraction + validation_fraction >= 1:
+        raise ValueError("The sum of the training and validation fractions must be less than 1 the remaining fraction is used for the test set")
+
     # Attempt to open the file and import the trajectories and time points
     try:
         with h5py.File(prey_preditor_path, 'r') as full_data:
@@ -153,13 +156,18 @@ def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, split_fra
 
     # Preform a random shuffling
     if shuffle:
+        logging.info("Shuffling the data so that the order of the data does not affect the model")
         np.random.shuffle(encoded_data)
 
-    # Split the data into training and validation sets. 
-    split_index = int(len(encoded_data) * split_fraction)
-    train_data = encoded_data[:split_index]
-    val_data = encoded_data[split_index:]
+    # Split the data into training, validation and test sets. 
+    logging.info(f"Splitting the data into training, validation, and test sets with fractions: {train_fraction}, {validation_fraction}, {1 - train_fraction - validation_fraction}")
+    train_index = int(len(encoded_data) * train_fraction)
+    val_index = int(len(encoded_data) * (train_fraction + validation_fraction))
 
+
+    train_data = encoded_data[:train_index]
+    val_data = encoded_data[train_index:val_index]
+    test_data = encoded_data[val_index:]
 
 
     ### This next part is purely for verification, and it does not return tokenised data
@@ -173,87 +181,25 @@ def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, split_fra
         encoded_data = tokeniser_model(numerical_string, return_tensors="pt")["input_ids"].tolist()[0]
 
         # Print an example of the data encoding
-        logging.info(f"An example of the data encoding is shown below:\n"
-                    f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                    f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n"
-                    f"After Encoding to String - First 5 Entries: {numerical_string}\n"
-                    f"After Encoding to Tokenised: {encoded_data}")
+        log_message = (f"An example of the data encoding is shown below:\n"
+                       f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                       f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+        if not shuffle:
+            log_message += f"After Encoding to String - First 5 Entries: {numerical_string}\n"
+        log_message += f"After Encoding to Tokenised: {encoded_data}"
+        logging.info(log_message)
 
         
     else: 
         # Print an example of the data encoding
-        logging.info(f"An example of the data encoding is shown below:\n"
-                    f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                    f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n"
-                    f"After Encoding to String - First 5 Entries: {numerical_string}")
+        log_message = (f"An example of the data encoding is shown below:\n"
+                       f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                       f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+        if not shuffle:
+            log_message += f"After Encoding to String - First 5 Entries: {numerical_string}"
+        logging.info(log_message)
 
-    return train_data, val_data
-
-
-
-
-
-
-
-
-
-
-def decoder(encoded_string):
-    """
-    Decodes a multivariate time series string into two NumPy arrays:
-    - Prey population data
-    - Predator population data
-
-    This function reverses the encoding process, extracting the prey and predator 
-    population values from a structured string representation.
-
-    Parameters
-    ----------
-    encoded_string : str
-        A semicolon-separated string of prey-predator pairs in the format:
-        `"prey_1,predator_1; prey_2,predator_2; ..."`.
-        Each pair represents the population values of prey and predator at a given time step.
-
-    Returns
-    -------
-    tuQWEN le[np.ndarray, np.ndarray]
-        - prey_array : np.ndarray
-            A NumPy array containing the prey population values as floats.
-        - predator_array : np.ndarray
-            A NumPy array containing the predator population values as floats.
-
-    Raises
-    ------
-    ValueError
-        If an incorrectly formatted input string is provided.
-    """
-
-    # Split the string into individual "prey,predator" pairs
-    data_pairs = encoded_string.split(";")
-
-    # Extract prey and predator values separately
-    prey_data = []
-    predator_data = []
-
-    for pair in data_pairs:
-        if pair.strip():  # Ensure the pair is not empty (to handle trailing semicolons)
-            # if there is an odd number at the end. 
-            if "," not in pair:
-                continue
-            try:
-                prey, predator = pair.split(",")  
-                # Convert to float for numerical use (remove any spaces)
-                prey_data.append(float(prey.strip()))  
-                predator_data.append(float(predator.strip()))
-            except ValueError:
-                raise ValueError(f"Invalid data format encountered in: '{pair}'. Ensure correct structure.")
-
-    # Convert lists to NumPy arrays
-    prey_array = np.array(prey_data, dtype=np.float32)
-    predator_array = np.array(predator_data, dtype=np.float32)
-
-    return prey_array, predator_array
-
+    return train_data, val_data, test_data
 
 
 
