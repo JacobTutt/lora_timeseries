@@ -616,7 +616,7 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
     return total_forward_pass, total_lora
 
 
-def model_generation_flops(tokens_given, tokens_generated, lora_ranks, randomness = False):
+def model_generation_flops(tokens_given, tokens_generated, lora_ranks, randomness = False, print_summary = True):
     total_flops = 0
     """
     Calculates the total number of FLOPs required to generate a sequence of tokens using the Qwen model,
@@ -665,10 +665,11 @@ def model_generation_flops(tokens_given, tokens_generated, lora_ranks, randomnes
     if randomness:
         total_flops += tokens_generated * np.sum(final_softmax_flops(vocabuluary_dimension))
 
-    print (f"Total FLOPs for generating {tokens_generated} tokens: {total_flops:.5g}")
-    print (f"Total FLOPs from LoRA adaptation: {total_lora_flops:.5g}")
-     # print percentage of flops budget
-    print(f"{'Percentage of Total FLOPs Budget:':<35} {total_flops / budget *100:.5g} %")
+    if print_summary:
+        print (f"Total FLOPs for generating {tokens_generated} tokens: {total_flops:.5g}")
+        print (f"Total FLOPs from LoRA adaptation: {total_lora_flops:.5g}")
+            # print percentage of flops budget
+        print(f"{'Percentage of Total FLOPs Budget:':<35} {total_flops / budget *100:.5g} %")
     
     return total_flops, total_lora_flops
 
@@ -676,7 +677,7 @@ def model_generation_flops(tokens_given, tokens_generated, lora_ranks, randomnes
 
 ### Final equation
 
-def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training):
+def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training, print_summary = True):
     """
     Calculates the total number of FLOPs required to train the Qwen model, including LoRA adaptation if specified.
 
@@ -720,15 +721,16 @@ def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training):
     training_flops = batch_size * num_steps_training * forward_back_pass
     training_lora_flops = batch_size * num_steps_training * lora_forward_back_pass
 
-    print (f"Total FLOPs for training: {training_flops:.5g}")
-    print (f"Total FLOPs from LoRA adaptation: {training_lora_flops:.5g}")
-     # print percentage of flops budget
-    print(f"{'Percentage of Total FLOPs Budget:':<35} {training_flops / budget *100:.5g} %")
+    if print_summary:
+        print(f"Total FLOPs for training: {training_flops:.5g}")
+        print (f"Total FLOPs from LoRA adaptation: {training_lora_flops:.5g}")
+        # print percentage of flops budget
+        print(f"{'Percentage of Total FLOPs Budget:':<35} {training_flops / budget *100:.5g} %")
 
     return training_flops, training_lora_flops
 
 
-def model_evaluation_flops(no_tokens, lora_ranks, batch_size):
+def model_evaluation_flops(no_tokens, lora_ranks, batch_size, print_summary = True):
     """
     Calculates the total number of FLOPs required to evaluate the Qwen model over a dataset,
     optionally including LoRA adaptation overhead.
@@ -765,10 +767,11 @@ def model_evaluation_flops(no_tokens, lora_ranks, batch_size):
     evaluation_flops = batch_size * forward_pass
     evaluation_lora_flops = batch_size * single_lora_flops
 
-    print (f"Total FLOPs for evaluation: {evaluation_flops:.5g}")
-    print (f"Total FLOPs from LoRA adaptation: {evaluation_lora_flops:.5g}")
-     # print percentage of flops budget
-    print(f"{'Percentage of Total FLOPs Budget:':<35} {evaluation_flops / budget * 100:.5g} %")
+    if print_summary:
+        print (f"Total FLOPs for evaluation: {evaluation_flops:.5g}")
+        print (f"Total FLOPs from LoRA adaptation: {evaluation_lora_flops:.5g}")
+        # print percentage of flops budget
+        print(f"{'Percentage of Total FLOPs Budget:':<35} {evaluation_flops / budget * 100:.5g} %")
 
     return evaluation_flops, evaluation_lora_flops
     

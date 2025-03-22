@@ -4,7 +4,7 @@ import h5py
 import logging 
 logging.basicConfig(level=logging.INFO,  format="%(levelname)s - %(message)s",  datefmt="%H:%M:%S")
 
-def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, train_fraction =0.7, validation_fraction= 0.15 , shuffle = False, tokeniser_model = None):
+def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, train_fraction =0.7, validation_fraction= 0.15 , shuffle = False, tokeniser_model = None, print_summary = True):
     """
     Preprocesses predator-prey time series data from an HDF5 file by:
     1. Loading the data and verifying required fields.
@@ -171,33 +171,33 @@ def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, train_fra
 
 
     ### This next part is purely for verification, and it does not return tokenised data
+    if print_summary:
+        # This is stored in encoded data but dynamically generated for the display
+        numerical_string = ';'.join(encoded_data[0].split(';')[:5])
 
-    # This is stored in encoded data but dynamically generated for the display
-    numerical_string = ';'.join(encoded_data[0].split(';')[:5])
+        # Now import the tokeniser from the Qwen model if it is provided for display purposes
+        if tokeniser_model is not None:
+            # This is simply to show the encoding of the data, it is not required for the function
+            encoded_data = tokeniser_model(numerical_string, return_tensors="pt")["input_ids"].tolist()[0]
 
-    # Now import the tokeniser from the Qwen model if it is provided for display purposes
-    if tokeniser_model is not None:
-        # This is simply to show the encoding of the data, it is not required for the function
-        encoded_data = tokeniser_model(numerical_string, return_tensors="pt")["input_ids"].tolist()[0]
+            # Print an example of the data encoding
+            log_message = (f"An example of the data encoding is shown below:\n"
+                        f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                        f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+            if not shuffle:
+                log_message += f"After Encoding to String - First 5 Entries: {numerical_string}\n"
+            log_message += f"After Encoding to Tokenised: {encoded_data}"
+            logging.info(log_message)
 
-        # Print an example of the data encoding
-        log_message = (f"An example of the data encoding is shown below:\n"
-                       f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                       f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
-        if not shuffle:
-            log_message += f"After Encoding to String - First 5 Entries: {numerical_string}\n"
-        log_message += f"After Encoding to Tokenised: {encoded_data}"
-        logging.info(log_message)
-
-        
-    else: 
-        # Print an example of the data encoding
-        log_message = (f"An example of the data encoding is shown below:\n"
-                       f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                       f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
-        if not shuffle:
-            log_message += f"After Encoding to String - First 5 Entries: {numerical_string}"
-        logging.info(log_message)
+            
+        else: 
+            # Print an example of the data encoding
+            log_message = (f"An example of the data encoding is shown below:\n"
+                        f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                        f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+            if not shuffle:
+                log_message += f"After Encoding to String - First 5 Entries: {numerical_string}"
+            logging.info(log_message)
 
     return train_data, val_data, test_data
 
