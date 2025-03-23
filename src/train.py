@@ -3,6 +3,8 @@ from accelerate import Accelerator
 from .evaluate import evaluate
 from .flops_counter import model_training_flops
 from tqdm import tqdm
+from torch.utils.data import DataLoader
+
 
 # ------------------------ EarlyStopping ------------------------ #
 class EarlyStopping:
@@ -62,7 +64,7 @@ class EarlyStopping:
             self.counter = 0
 
 
-def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train_loader, val_loader, early_stopping_patience=3, subset = None, print_summary=False, wandb_run=None):
+def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train_dataset, val_dataset, early_stopping_patience=3, subset = None, eval_freq =10, print_summary=False, wandb_run=None):
     """
     Train a LoRA-adapted transformer model using gradient descent, early stopping, and optional Weights & Biases tracking.
 
@@ -86,23 +88,26 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
     learning_rate : float
         Learning rate for the Adam optimizer.
 
-    train_loader : torch.utils.data.DataLoader
-        DataLoader object for training dataset.
+    train_dataset : torch.utils.data.Dataset
+        Dataset object containing training sequences.
 
-    val_loader : torch.utils.data.DataLoader
-        DataLoader object for validation dataset.
+    val_dataset : torch.utils.data.Dataset
+        Dataset object containing validation sequences.
 
     early_stopping_patience : int, optional
-        Number of consecutive validation checks with no improvement before early stopping.
+        Number of consecutive evaluations with no improvement before early stopping (default: 3).
 
     subset : int or None, optional
-        If specified, evaluates only the first `subset` batches during validation (useful for speeding up evaluation).
+        If specified, limits validation to the first `subset` batches (for faster evaluation).
+
+    eval_freq : int, optional
+        Frequency (in training steps) at which validation and logging are performed (default: 10).
 
     print_summary : bool, optional
-        If True, prints training metrics and FLOP summaries at the end.
+        If True, prints final training statistics including FLOP estimates (default: False).
 
     wandb_run : wandb.Run or None, optional
-        An active Weights & Biases run for logging metrics. If None, wandb logging is disabled.
+        An active Weights & Biases run for logging training metrics. If None, wandb logging is skipped.
 
     Returns
     -------
@@ -119,7 +124,10 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
         Total estimated FLOPs used during training + validation.
     """
 
-    # Optimizer only on trainable (LoRA and LM head) parameters
+    # The data loader for training
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Optimiser only on trainable (LoRA and LM head) parameters
     optimiser = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=learning_rate)
 
     # Early stopping controller
@@ -127,7 +135,7 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
 
     # Use Hugging Face's Accelerator to prepare multi-device training
     accelerator = Accelerator()
-    model, optimiser, train_loader, val_loader = accelerator.prepare(model, optimiser, train_loader, val_loader)
+    model, optimiser, train_loader = accelerator.prepare(model, optimiser, train_loader)
 
     # Assume all sequences are same length → use first item
     token_length = len(train_loader.dataset[0])
@@ -139,12 +147,14 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
 
     model.train()
 
-    # TQDM progress bar for all training steps
+    # progress bar
     pbar = tqdm(total=max_training_steps, desc="Training", unit="step")
 
 
+    # iterate over training steps as long as early stopping condition is not met
     while step < max_training_steps:
         for batch in train_loader:
+
             # Forward and backward pass
             optimiser.zero_grad()
             outputs = model(batch, labels=batch)
@@ -153,13 +163,15 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
             optimiser.step()
             step += 1
 
-            # Update progress bar with latest training loss
+            # Update progress bar
             pbar.update(1)
 
             # Validation and logging every 25 steps, if subset is given it will limit the number of batches evaluated on to 
             # the first `subset` batches which are random
-            if step % 25 == 0:
-                val_loss, flops_cost = evaluate(model, val_loader, accelerator, lora_rank, subset=subset)
+            if step % eval_freq == 0:
+                val_loss, flops_cost = evaluate(model, val_dataset, accelerator, lora_rank, subset=subset)
+                # Convert back to training mode
+                model.train()
                 total_eval_cost += flops_cost
                 pbar.set_postfix({"train_loss": loss.item(), "val_loss": val_loss})
 
@@ -175,16 +187,25 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
                         "eval_flops": flops_cost
                     })
 
-                # Early stopping check
+                # Early stopping check which will break the loop if the early stopping condition is met
                 early_stopper(val_loss)
                 if early_stopper.early_stop:
                     print(
                         f"Early stopping occurred at step {step} "
                         f"(val_loss = {val_loss:.4f}, patience = {early_stopper.patience})"
                     )
+                    # Log the early stopping step to wandb
                     if wandb_run is not None:
                         wandb_run.log({"early_stopping_step": step})
+                    # Break the loop
                     break
+            else:
+                # This ensure we log the training loss even if we don't evaluate to wandb
+                if wandb_run is not None:
+                    wandb_run.log({
+                        "train_loss": loss.item(),
+                        "step": step,
+                    })
 
             if step >= max_training_steps:
                 break
@@ -192,10 +213,11 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
     pbar.close()
 
     # Final full validation after training ends
-    val_loss_final, flops_cost = evaluate(model, val_loader, accelerator, lora_rank)
+    val_loss_final, flops_cost = evaluate(model, val_dataset, accelerator, lora_rank)
     total_eval_cost += flops_cost
     step_tracker.append(step)
     val_loss_tracker.append(val_loss_final)
+
 
     # Compute training FLOPs
     training_flops, _ = model_training_flops(

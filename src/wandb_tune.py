@@ -2,7 +2,6 @@ from .preprocessor import preprocessor
 from .full_model import full_model
 from .train import train
 from .dataset import TimeSeriesData
-from torch.utils.data import DataLoader
 import wandb
 
 # ------------------------ Training Function ------------------------ #
@@ -55,10 +54,10 @@ def hyperparam_wandb(config=None):
         lora_rank = config.lora_rank # LoRA rank to give model
         token_length = config.token_length # token length
         max_training_steps = config.max_steps # maximum training steps
-        no_train_sequences = config.train_sequences # number of training sequences
         batch_size = config.batch_size # batch size
         decimal_places = config.decimal_places # decimal places used for data
         subset = config.subset # subset of data to evaluate
+        eval_freq = config.eval_freq # evaluate every 10 steps
 
         # Load model and tokeniser
         model, tokeniser, device = full_model(lora_rank=lora_rank)
@@ -66,22 +65,14 @@ def hyperparam_wandb(config=None):
         # Load and tokenise dataset
         train_set_total, val_set_total, test_set_total = preprocessor('lotka_volterra_data.h5', percentile=90, decimal_places=decimal_places, train_fraction=0.7, validation_fraction=0.15, shuffle=False, print_summary=False)
 
-        # Check if the number of training sequences requested is greater than available
-        if len(train_set_total) < no_train_sequences:
-            raise ValueError(f"Number of training sequences requested is greater than available. Please reduce the number of training sequences to {len(train_set)}.")
-        
-        train_set = train_set_total[:no_train_sequences]
-
-        train_dataset = TimeSeriesData(train_set, tokeniser, max_length=token_length, stride=token_length/2)
+        train_dataset = TimeSeriesData(train_set_total, tokeniser, max_length=token_length, stride=token_length/2)
         val_dataset = TimeSeriesData(val_set_total, tokeniser, max_length=token_length, stride=token_length)
-
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=1)
 
         # ------------------------ Call Your Training Loop ------------------------ #
         _, _, _ = train(model=model, lora_rank=lora_rank, max_training_steps=max_training_steps, batch_size=batch_size, learning_rate=learning_rate,
-            train_loader=train_loader, val_loader=val_loader, early_stopping_patience=3,
+            train_dataset=train_dataset, val_dataset=val_dataset, early_stopping_patience=3,
             subset=subset, # Evaluate only om  a certain no batches during validation in the middle of training this is useful for speeding up evaluation
+            eval_freq = eval_freq, # Evaluate on validation every 10 steps
             print_summary=False,
             wandb_run=wandb  # Pass wandb for logging
         )

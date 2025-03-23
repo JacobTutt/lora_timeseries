@@ -7,4 +7,4 @@ from .evaluate import *
 from .train import *
 from .full_model import *
 from .dataset import *
-from .wandb import *
+from .wandb_tune import *

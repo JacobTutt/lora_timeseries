@@ -1,21 +1,24 @@
 import torch
+from accelerate import Accelerator
 from .flops_counter import model_evaluation_flops
+from torch.utils.data import DataLoader
 
-def evaluate(model, val_loader, accelerator, lora_ranks, subset = None, print_summary=False):
+def evaluate(model, val_dataset, accelerator, lora_ranks, subset = None, print_summary=False):
     """
-    Evaluate a model on a validation set and estimate FLOP cost.
+    Evaluate a model on a validation dataset and estimate FLOP cost.
 
-    This function runs the model in evaluation mode using a validation dataloader
-    and returns the average loss as well as the estimated number of floating point operations (FLOPs)
-    based on the LoRA configuration and data size.
+    This function sets the model to evaluation mode, computes the average 
+    cross-entropy loss on the given validation dataset, and estimates the 
+    floating point operations (FLOPs) required for evaluation. Optionally, 
+    evaluation can be limited to a subset of batches for faster runtime.
 
     Parameters
     ----------
     model : torch.nn.Module
         The PyTorch model to evaluate. Should be wrapped by `accelerator.prepare()`.
     
-    val_loader : torch.utils.data.DataLoader
-        Dataloader for the validation dataset. Each item should be a tokenized tensor batch.
+    val_dataset : torch.utils.data.Dataset
+        The validation dataset containing tokenized input sequences.
     
     accelerator : accelerate.Accelerator
         Hugging Face `Accelerator` instance used to handle device placement and model wrapping.
@@ -32,6 +35,9 @@ def evaluate(model, val_loader, accelerator, lora_ranks, subset = None, print_su
         The estimated number of FLOPs required to evaluate the model over the validation set.
     """
 
+
+    val_loader = DataLoader(val_dataset, batch_size=1)
+    val_loader = accelerator.prepare(val_loader)
     # Prepare the model for full evaluation - ie Disable dropout, layernorm noise, etc.
     model.eval() 
     # A running total of the validation loss for ech batch which will be averaged at the end
@@ -50,7 +56,6 @@ def evaluate(model, val_loader, accelerator, lora_ranks, subset = None, print_su
         for i, batch in enumerate(val_loader):
             if i >= max_batches:
                 break
-            batch = accelerator.prepare(batch)
             # Forward pass with teacher forcing (labels = input)
             outputs = model(batch, labels=batch)
             # Accumulate loss
