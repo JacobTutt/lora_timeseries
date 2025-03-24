@@ -36,8 +36,13 @@ def evaluate(model, val_dataset, accelerator, lora_ranks, subset = None, print_s
     """
 
 
-    val_loader = DataLoader(val_dataset, batch_size=1)
-    val_loader = accelerator.prepare(val_loader)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)
+
+    if accelerator is None:
+        accelerator = Accelerator()
+        model, val_loader = accelerator.prepare(model, val_loader)
+    else:
+        val_loader = accelerator.prepare(val_loader)
     # Prepare the model for full evaluation - ie Disable dropout, layernorm noise, etc.
     model.eval() 
     # A running total of the validation loss for ech batch which will be averaged at the end

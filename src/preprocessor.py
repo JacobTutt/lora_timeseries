@@ -4,34 +4,67 @@ import h5py
 import logging 
 logging.basicConfig(level=logging.INFO,  format="%(levelname)s - %(message)s",  datefmt="%H:%M:%S")
 
-def preprocessor(prey_preditor_path, percentile= 95, decimal_places=2, train_fraction =0.7, validation_fraction= 0.15 , shuffle = False, tokeniser_model = None, print_summary = True):
+def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fraction =0.7, validation_fraction= 0.15 , shuffle = False, tokeniser_model = None, print_summary = True):
     """
-    Preprocesses predator-prey time series data from an HDF5 file by:
-    1. Loading the data and verifying required fields.
-    2. Scaling all values based on the 95th percentile (default) to ensure data fits within a standard range.
-    3. Encoding the data into a string format that can be tokenised by QWEN2.5-0.5B-Instruct.
-    Parameters:
+    Preprocesses Lotka-Volterra predator-prey time series data from an HDF5 file.
+
+    This function performs the following steps:
+    1. Loads trajectory and time data from an HDF5 file.
+    2. Scales the prey and predator populations using a percentile-based normalization.
+    3. Converts the scaled data into a string-based sequence format suitable for tokenisation by Qwen-like models.
+    4. Optionally shuffles the dataset.
+    5. Splits the data into train, validation, and test sets.
+    6. Optionally prints a summary including tokenized examples if a tokenizer is provided.
+
+    Parameters
     ----------
     prey_preditor_path : str
-        Path to the HDF5 file containing the Lotka-Volterra simulated data.
-    percentile : int, optional (default=95)
-        The percentile value used for determining the scaling factor (alpha).
-        Ensures that `percentile%` of the data falls within the standard range.
-    decimal_places : int, optional (default=2)
-        Number of decimal places to round the scaled data to.
+        Path to the HDF5 file containing the simulated time series data.
+        Expected to include datasets named "trajectories" and "time".
 
-    Returns:
+    percentile : int, optional (default=90)
+        Percentile used to compute a scaling factor. Ensures `percentile`% of values fall in a compressed range.
+
+    decimal_places : int, optional (default=3)
+        Number of decimal places to round the scaled values before encoding to string.
+
+    train_fraction : float, optional (default=0.8)
+        Fraction of the dataset to use for training. Must be less than 1 - `validation_fraction`.
+
+    validation_fraction : float, optional (default=0.1)
+        Fraction of the dataset to use for validation. The remainder is used for testing.
+
+    shuffle : bool, optional (default=False)
+        Whether to randomly shuffle the trajectories before splitting.
+
+    tokeniser_model : transformers.PreTrainedTokenizer or None, optional
+        Tokenizer object (e.g., from Hugging Face) used for printing a preview of how the encoded string would be tokenized.
+        This is only used for logging/debugging; tokenization is not returned.
+
+    print_summary : bool, optional (default=True)
+        If True, logs a summary of the preprocessing steps, including an example of the scaled and tokenized output.
+
+    Returns
     -------
-    str
-        Encoded multi-variate time series data in the format:
-        "prey1,predator1; prey2,predator2; ...".
+    train_data : list of str
+        List of encoded strings for training. Each string represents one trajectory in the format:
+        `"prey1,predator1;prey2,predator2;..."`
 
-    Raises:
+    val_data : list of str
+        List of encoded strings for validation.
+
+    test_data : list of str
+        List of encoded strings for testing.
+
+    Raises
     ------
     RuntimeError
         If the HDF5 file cannot be opened or required datasets are missing.
+
     ValueError
-        If the dimensions of prey, predator, and time data do not match.
+        If:
+        - The scaling factor is non-positive.
+        - The sum of `train_fraction` and `validation_fraction` exceeds or equals 1.
     """
     if train_fraction + validation_fraction >= 1:
         raise ValueError("The sum of the training and validation fractions must be less than 1 the remaining fraction is used for the test set")

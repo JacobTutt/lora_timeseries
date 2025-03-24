@@ -28,7 +28,7 @@ def decoder(encoded_string):
     ValueError
         If an incorrectly formatted input string is provided.
     """
-
+    encoded_string = encoded_string[:encoded_string.rfind(";")]
     # Split the string into individual "prey,predator" pairs
     data_pairs = encoded_string.split(";")
 

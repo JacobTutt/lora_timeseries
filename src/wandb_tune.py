@@ -69,10 +69,12 @@ def hyperparam_wandb(config=None):
         val_dataset = TimeSeriesData(val_set_total, tokeniser, max_length=token_length, stride=token_length)
 
         # ------------------------ Call Your Training Loop ------------------------ #
+
         _, _, _ = train(model=model, lora_rank=lora_rank, max_training_steps=max_training_steps, batch_size=batch_size, learning_rate=learning_rate,
-            train_dataset=train_dataset, val_dataset=val_dataset, early_stopping_patience=3,
+            no_tokens = token_length, train_dataset=train_dataset, val_dataset=val_dataset, early_stopping_patience=5,
             subset=subset, # Evaluate only om  a certain no batches during validation in the middle of training this is useful for speeding up evaluation
             eval_freq = eval_freq, # Evaluate on validation every 10 steps
             print_summary=False,
             wandb_run=wandb  # Pass wandb for logging
         )
+

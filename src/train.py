@@ -4,8 +4,7 @@ from .evaluate import evaluate
 from .flops_counter import model_training_flops
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-
-
+import json
 # ------------------------ EarlyStopping ------------------------ #
 class EarlyStopping:
     """
@@ -64,68 +63,90 @@ class EarlyStopping:
             self.counter = 0
 
 
-def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train_dataset, val_dataset, early_stopping_patience=3, subset = None, eval_freq =10, print_summary=False, wandb_run=None):
+def train(model, lora_rank, max_training_steps, batch_size, no_tokens, learning_rate, train_dataset, val_dataset, early_stopping_patience=5, subset = None, eval_freq =10, print_summary=False, wandb_run=None, save_path = None):
     """
-    Train a LoRA-adapted transformer model using gradient descent, early stopping, and optional Weights & Biases tracking.
+    Trains a LoRA-adapted transformer model with early stopping, validation, FLOP tracking,
+    and optional Weights & Biases (wandb) logging.
 
-    This function performs step-wise training with periodic validation, FLOP tracking, and optional logging to wandb.
-    Early stopping is triggered if validation loss doesn't improve after a given number of evaluations.
+    The training loop supports gradient descent with periodic validation, early stopping based
+    on validation loss, and efficient FLOP estimation. Evaluation is optionally performed on a
+    subset of the validation data for speed. Progress is shown with a live progress bar.
 
     Parameters
     ----------
     model : torch.nn.Module
-        The transformer model with LoRA modules injected and ready for fine-tuning.
+        The transformer model with LoRA adapters injected and ready for fine-tuning.
 
     lora_rank : int
-        The rank of the LoRA decomposition, used in FLOP cost estimation.
+        The rank used for LoRA decomposition; also used in FLOP estimation.
 
     max_training_steps : int
-        Maximum number of gradient updates (not epochs).
+        The total number of gradient update steps to perform.
 
     batch_size : int
-        Size of each training mini-batch.
+        Number of sequences per training batch.
+
+    no_tokens : int
+        Number of tokens per sequence (used for FLOP cost estimation).
 
     learning_rate : float
-        Learning rate for the Adam optimizer.
+        The learning rate used by the Adam optimizer.
 
     train_dataset : torch.utils.data.Dataset
-        Dataset object containing training sequences.
+        The dataset of input sequences for training.
 
     val_dataset : torch.utils.data.Dataset
-        Dataset object containing validation sequences.
+        The dataset used for validation during training and final evaluation.
 
-    early_stopping_patience : int, optional
-        Number of consecutive evaluations with no improvement before early stopping (default: 3).
+    early_stopping_patience : int, optional (default=5)
+        Number of consecutive validation checks with no improvement before stopping training.
 
-    subset : int or None, optional
-        If specified, limits validation to the first `subset` batches (for faster evaluation).
+    subset : int or None, optional (default=None)
+        If provided, limits validation during training to the first `subset` batches.
 
-    eval_freq : int, optional
-        Frequency (in training steps) at which validation and logging are performed (default: 10).
+    eval_freq : int, optional (default=10)
+        How often (in steps) to run validation and logging.
 
-    print_summary : bool, optional
-        If True, prints final training statistics including FLOP estimates (default: False).
+    print_summary : bool, optional (default=False)
+        If True, prints a summary of training duration and compute cost.
 
     wandb_run : wandb.Run or None, optional
-        An active Weights & Biases run for logging training metrics. If None, wandb logging is skipped.
+        An active Weights & Biases run object. If provided, logs all metrics to wandb.
 
     Returns
     -------
     model : torch.nn.Module
-        The trained (or early-stopped) model.
+        The trained model after completion or early stopping.
 
-    step_tracker : List[int]
-        List of training steps at which validation occurred.
+    val_step_tracker : List[int]
+        List of steps at which validation was performed.
+
+    train_step_tracker : List[int]
+        List of steps at which training losses were recorded.
 
     val_loss_tracker : List[float]
-        List of validation losses corresponding to `step_tracker`.
+        Validation loss values corresponding to `val_step_tracker`.
 
-    total_flops : float
-        Total estimated FLOPs used during training + validation.
+    train_loss_tracker : List[float]
+        Training loss values recorded per evaluation step.
+
+    val_loss_final : float
+        Final validation loss computed after the last training step.
+
+    training_flops : float
+        Estimated number of floating-point operations (FLOPs) used for training.
+
+    total_eval_cost : float
+        Estimated number of FLOPs used for all validation evaluations
+    
+    save_path : str or None
+        If provided, saves a json file with training results to the specified path    
+    
     """
 
     # The data loader for training
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    # The dataloader for the validation is within the evaluate function to speed up the process
 
     # Optimiser only on trainable (LoRA and LM head) parameters
     optimiser = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=learning_rate)
@@ -133,26 +154,38 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
     # Early stopping controller
     early_stopper = EarlyStopping(patience=early_stopping_patience, mode='min')
 
+    # Log hyperparameters to wandb
+    if wandb_run is not None:
+        wandb_run.log({
+        "learning_rate": learning_rate,
+        "batch_size": batch_size,
+        "no_tokens": no_tokens,
+        })
+
     # Use Hugging Face's Accelerator to prepare multi-device training
     accelerator = Accelerator()
     model, optimiser, train_loader = accelerator.prepare(model, optimiser, train_loader)
 
-    # Assume all sequences are same length → use first item
+    # as all all sequences are same length use first item
     token_length = len(train_loader.dataset[0])
 
     step = 0
     total_eval_cost = 0
-    step_tracker = []       # Track steps when validation is run
+    train_step_tracker = []       # Track steps when validation is run
+    val_step_tracker = []         # Track steps when validation is run
     val_loss_tracker = []   # Track validation loss per evaluation
+    train_loss_tracker = [] # Track training loss per evaluation
 
     model.train()
 
     # progress bar
     pbar = tqdm(total=max_training_steps, desc="Training", unit="step")
 
-
+    # Early stopping flag
+    stop_training = False
+    early_stopping_st = None
     # iterate over training steps as long as early stopping condition is not met
-    while step < max_training_steps:
+    while step < max_training_steps and not stop_training:
         for batch in train_loader:
 
             # Forward and backward pass
@@ -165,17 +198,19 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
 
             # Update progress bar
             pbar.update(1)
+            train_step_tracker.append(step)
+            train_loss_tracker.append(loss.item())
 
             # Validation and logging every 25 steps, if subset is given it will limit the number of batches evaluated on to 
             # the first `subset` batches which are random
-            if step % eval_freq == 0:
+            if (step % eval_freq == 0) or (step == 1):
                 val_loss, flops_cost = evaluate(model, val_dataset, accelerator, lora_rank, subset=subset)
                 # Convert back to training mode
                 model.train()
                 total_eval_cost += flops_cost
                 pbar.set_postfix({"train_loss": loss.item(), "val_loss": val_loss})
 
-                step_tracker.append(step)
+                val_step_tracker.append(step)
                 val_loss_tracker.append(val_loss)
 
                 # Log metrics to wandb
@@ -184,23 +219,23 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
                         "train_loss": loss.item(),
                         "val_loss": val_loss,
                         "step": step,
-                        "eval_flops": flops_cost
+                        "eval_flops": total_eval_cost
                     })
 
                 # Early stopping check which will break the loop if the early stopping condition is met
                 early_stopper(val_loss)
                 if early_stopper.early_stop:
-                    print(
-                        f"Early stopping occurred at step {step} "
-                        f"(val_loss = {val_loss:.4f}, patience = {early_stopper.patience})"
-                    )
                     # Log the early stopping step to wandb
                     if wandb_run is not None:
+                        stop_training = True
+                        print(f"Early stopping at step {step}, validation loss: {val_loss}")
+                        early_stopping_st = step
                         wandb_run.log({"early_stopping_step": step})
                     # Break the loop
                     break
             else:
                 # This ensure we log the training loss even if we don't evaluate to wandb
+
                 if wandb_run is not None:
                     wandb_run.log({
                         "train_loss": loss.item(),
@@ -213,10 +248,8 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
     pbar.close()
 
     # Final full validation after training ends
-    val_loss_final, flops_cost = evaluate(model, val_dataset, accelerator, lora_rank)
+    val_loss_final, flops_cost = evaluate(model, val_dataset, accelerator, lora_rank, subset = None, print_summary=False)
     total_eval_cost += flops_cost
-    step_tracker.append(step)
-    val_loss_tracker.append(val_loss_final)
 
 
     # Compute training FLOPs
@@ -248,4 +281,26 @@ def train(model, lora_rank, max_training_steps, batch_size, learning_rate, train
         print(f"Total training FLOPs: {training_flops:.3e}")
         print(f"Total evaluation FLOPs: {total_eval_cost:.3e}")
 
-    return model, step_tracker, val_loss_tracker, total_flops
+
+    if save_path is not None:
+        # Save to joblib file with dictionary of all the data
+        results_run = {
+            "learning_rate": float(learning_rate),
+            "batch_size": float(batch_size),
+            "no_tokens": float(no_tokens),
+            "val_step_tracker": list(val_step_tracker),
+            "train_step_tracker": list(train_step_tracker),
+            "val_loss_tracker": list(val_loss_tracker),
+            "train_loss_tracker": list(train_loss_tracker),
+            "val_loss_final": float(val_loss_final),
+            "training_flops": float(training_flops),
+            "total_eval_cost": float(total_eval_cost),
+            "early_stopping_step": early_stopping_st,
+            "stopping_reason": "early" if early_stopping_st is not None else "max_steps"
+        }
+
+
+        with open(save_path, "w") as f:
+            json.dump(results_run, f, indent=4)
+
+    return model, val_step_tracker, train_step_tracker, val_loss_tracker, train_loss_tracker, val_loss_final, training_flops, total_eval_cost
