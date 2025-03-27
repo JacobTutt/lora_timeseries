@@ -1,8 +1,7 @@
-Archive/
 M2_CW_Venv/
 .DS_Store
 */__pycache__
-
+trained_model_save/
 venvs/
 
  
