@@ -63,18 +63,16 @@ def hyperparam_wandb(config=None):
         model, tokeniser, device = full_model(lora_rank=lora_rank)
         
         # Load and tokenise dataset
-        train_set_total, val_set_total, test_set_total = preprocessor('lotka_volterra_data.h5', percentile=90, decimal_places=decimal_places, train_fraction=0.7, validation_fraction=0.15, shuffle=False, print_summary=False)
+        train_set_total, val_set_total, test_set_total = preprocessor('lotka_volterra_data.h5', percentile=90, decimal_places=decimal_places, train_fraction=0.7, validation_fraction=0.15, shuffle=True, print_summary=False)
 
         train_dataset = TimeSeriesData(train_set_total, tokeniser, max_length=token_length, stride=token_length/2)
         val_dataset = TimeSeriesData(val_set_total, tokeniser, max_length=token_length, stride=token_length)
 
         # ------------------------ Call Your Training Loop ------------------------ #
 
-        _, _, _ = train(model=model, lora_rank=lora_rank, max_training_steps=max_training_steps, batch_size=batch_size, learning_rate=learning_rate,
-            no_tokens = token_length, train_dataset=train_dataset, val_dataset=val_dataset, early_stopping_patience=5,
+        _, _, _, _, _, _, _, _ = train(model=model, lora_rank=lora_rank, max_training_steps=max_training_steps, batch_size=batch_size, no_tokens = token_length ,learning_rate=learning_rate, train_dataset=train_dataset, val_dataset=val_dataset, early_stopping_patience = patience,
             subset=subset, # Evaluate only om  a certain no batches during validation in the middle of training this is useful for speeding up evaluation
             eval_freq = eval_freq, # Evaluate on validation every 10 steps
             print_summary=False,
-            wandb_run=wandb  # Pass wandb for logging
-        )
-
+            wandb_run=wandb,  # Pass wandb for logging
+            save_path=None) # Save the model to the path

@@ -66,6 +66,11 @@ def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fra
         - The scaling factor is non-positive.
         - The sum of `train_fraction` and `validation_fraction` exceeds or equals 1.
     """
+    
+    #### SET A SEED SO SHUFFLING IS REPRODUCIBLE
+    np.random.seed(42)
+
+
     if train_fraction + validation_fraction >= 1:
         raise ValueError("The sum of the training and validation fractions must be less than 1 the remaining fraction is used for the test set")
 

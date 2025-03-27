@@ -1,5 +1,7 @@
 import math
 import numpy as np
+import json
+import os
 
 # GLOBAL VARIABLES - these are also applied in the functions
 flops_cost_addition = 1
@@ -725,7 +727,7 @@ def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training, 
         print(f"Total FLOPs for training: {training_flops:.5g}")
         print (f"Total FLOPs from LoRA adaptation: {training_lora_flops:.5g}")
         # print percentage of flops budget
-        print(f"{'Percentage of Total FLOPs Budget:':<35} {training_flops / budget *100:.5g} %")
+        print(f"{'Percentage of Total FLOPs Budget:':<35} {(training_flops / budget) *100 :.5g} %")
 
     return training_flops, training_lora_flops
 
@@ -774,6 +776,58 @@ def model_evaluation_flops(no_tokens, lora_ranks, batch_size, print_summary = Tr
         print(f"{'Percentage of Total FLOPs Budget:':<35} {evaluation_flops / budget * 100:.5g} %")
 
     return evaluation_flops, evaluation_lora_flops
-    
+
+
+def flops_in_folder(results_folder="results", budget=1e17):
+    """
+    Recursively searches through a folder and its subdirectories for JSON files,
+    accumulating training and evaluation FLOPs from the first occurrence of each unique filename.
+
+    Parameters
+    ----------
+    results_folder : str
+        Path to the folder containing the results JSON files.
+    budget : float, optional
+        The total FLOP budget used for comparison in percentage calculation.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - "training_flops": total training FLOPs
+        - "evaluation_flops": total evaluation FLOPs
+        - "combined_flops": total combined FLOPs
+    """
+    total_training_flops = 0.0
+    total_eval_cost = 0.0
+    seen_filenames = set()
+
+    for root, _, files in os.walk(results_folder):
+        for filename in files:
+            if filename.endswith(".json") and filename not in seen_filenames:
+                seen_filenames.add(filename)
+                filepath = os.path.join(root, filename)
+                try:
+                    with open(filepath, "r") as f:
+                        data = json.load(f)
+                        total_training_flops += data.get("training_flops", 0.0)
+                        total_eval_cost += data.get("total_eval_cost", 0.0)
+                except Exception as e:
+                    print(f"Error reading {filepath}: {e}")
+
+    combined_flops = total_training_flops + total_eval_cost
+
+    print(f"Number of unique result files: {len(seen_filenames)}")
+    print(f"Total Training FLOPs: {total_training_flops:.3e}")
+    print(f"Total Evaluation FLOPs: {total_eval_cost:.3e}")
+    print(f"Total Combined FLOPs: {combined_flops:.3e}")
+    print(f"{'Percentage of Total FLOPs Budget:':<35} {combined_flops / budget * 100:.5g} %")
+
+    return {
+        "training_flops": total_training_flops,
+        "evaluation_flops": total_eval_cost,
+        "combined_flops": combined_flops
+    }
+
 
 
