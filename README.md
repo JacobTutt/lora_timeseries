@@ -1,7 +1,7 @@
 # M2 Coursework Repository
 ## LoRA for Time Series Analysis with LLMs
 
-This repository contains the full pipeline used to 
+This repository contains the full pipeline used to preform the evaluation, training, generation and hyperparameter tuning.
 
 ## Pipleine (`src`)
 
