@@ -1,12 +1,39 @@
 # M2 Coursework Repository
 ## LoRA for Time Series Analysis with LLMs
 
-This repository contains the full pipeline used to preform the evaluation, training, generation and hyperparameter tuning.
+- This repository contains the full pipeline used to preform the evaluation, training, generation and hyperparameter tuning.
+- Results were achieved by submitting jobs to a HPC and storing results and metric through .json files and using weights and biases (wandb)
+
 
 ## Pipleine (`src`)
+### `Preprocessor` 
+— Scaling & Encoding Time Series from HDF5
+### `Decoder` 
+— Convert Encoded String Back to Time Series Arrays
+### `TimeSeriesData` 
+— Tokenised Chunked Dataset for Transformers
+### `Full_model` 
+— Load and LoRA-Inject a Pretrained Transformer
+### `EarlyStopping` 
+— Prevent Overfitting with Adaptive Termination
+### `Train` 
+— LoRA Transformer Training with Validation, Logging, and Early Stopping
+### `Evaluate` 
+— Validation Loss and FLOPs Estimation for LoRA Models
+### `Generate` 
+— Autoregressive Sequence Prediction from Context Using LoRA Model
+### `Hyperparameter_run` 
+— Hyperparameter Training Run with LoRA
+### `Hyperparam_wandb` 
+— Run Sweep Trial with LoRA and W&B Integration
+### `Flops Calculations` 
+- The underlying flops calcs later built it to all relavent functions above
+### `Analysis` 
+- Additional Evaluation Metrics (MSE/MAE/MAPE) and plotting
 
 ## Notebooks
-
+- Provides a detailed discussion and breakdown of approach takens
+- Provides analysis and plotting of results from .json file results
 
 ---
 
