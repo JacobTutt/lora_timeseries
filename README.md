@@ -1,9 +1,9 @@
-# M2 Coursework Repository
+# [M2 Coursework Repository](https://coursework-m2.readthedocs.io/en/latest/)
 ## LoRA for Time Series Analysis with LLMs
 
 - This repository contains the full pipeline used to preform the evaluation, training, generation and hyperparameter tuning.
 - Results were achieved by submitting jobs to a HPC and storing results and metric through .json files and using weights and biases (wandb)
-
+- Documentation is avaliable: [here](https://coursework-m2.readthedocs.io/en/latest/)
 
 ## Pipleine (`src`)
 ### `Preprocessor` 
@@ -59,10 +59,10 @@ env\Scripts\activate      # For Windows
 ```
 
 ### 3. Install the dependencies
-Navigate to the repository’s root directory and install the package dependencies:
+Navigate to the repository’s root directory and install the pipeline and its dependencies:
 ```bash
 cd jlt67
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ### 4. Set Up a Jupyter Notebook Kernel
