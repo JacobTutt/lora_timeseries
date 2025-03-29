@@ -489,21 +489,30 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
     This function calculates the total number of flops in the forward pass of the Qwen model, and is able to account for additional
     flops if the LoRA rank adaptation is applied to the model.
 
-    It uses the following architectures:
+    It uses the following architecture:
     - Token to Embedding Layer (no compute)
     - 24 Transformer Layers:
-            - RMSNorm
-            - Rotary Positional Embedding (Query and Value Heads)
-            - Grouped Query Attention/ Multi Head Attention (14 Query Heads, 2 Key Heads, 2 Value Heads)
-                    - Query, Key, Value Heads + LoRA Rank Adaptation if included
-                    - Attention Mechanism
-                    - Softmax
-                    - Self Attention Mechanism (Values * Softmax)
-            - Residual Connection
-            - RSMNorm
-            - MLP (Projection Up, SwiGLU Activation Function, Projection Down)
-            - Residual Connection
-    - RMSNorm
+    
+      - RMSNorm
+      - Rotary Positional Embedding (Query and Value Heads)
+      - Grouped Query Attention / Multi-Head Attention (14 Query Heads, 2 Key Heads, 2 Value Heads):
+      
+        - Query, Key, Value Heads with optional LoRA Rank Adaptation
+        - Attention Mechanism
+        - Softmax
+        - Self-Attention Mechanism (Values  Softmax)
+
+      - Residual Connection
+      - RMSNorm
+      - MLP Block:
+      
+        - Projection Up
+        - SwiGLU Activation Function
+        - Projection Down
+
+      - Residual Connection
+
+    - Final RMSNorm
     - Embedding to Vocabulary Linear Layer
 
 
@@ -537,7 +546,10 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
     # [additions, multiplications, divisions, exponentiations, square_root]
     total_flops = np.array([0,0,0,0,0])
     single_layer_flops = np.array([0,0,0,0,0])
+    single_attention_block_flops = np.array([0,0,0,0,0])
+    single_mlp_flops = np.array([0,0,0,0,0])
     single_layer_lora_flops = np.array([0,0,0,0,0])
+    other_flops = np.array([0,0,0,0,0])
 
     # Compute the number of flops for the conversion of tokens to embeddings 
     total_flops += convert_tokens_to_embeddings() # This is zero as a memory operation but included for completeness
@@ -549,31 +561,55 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
     # [additions, multiplications, divisions, exponentiations, square_root]
 
     single_layer_flops += rmsnorm_flops(no_tokens, embedding_dim)
+    # RMS, Residaul Connection summary
+    other_flops += rmsnorm_flops(no_tokens, embedding_dim)
 
     # Multi Head Attention - Calculated across all 14 heads simultaneously
     single_layer_flops += query_head_flops(no_tokens, embedding_dim, query_heads)
     single_layer_flops += rotary_positional_embedding_flops(no_tokens, embedding_dim) # Rotary Positional Embedding for Query Heads
-
     single_layer_flops += key_head_flops(no_tokens, embedding_dim, key_heads)
     single_layer_flops += rotary_positional_embedding_flops(no_tokens, embedding_dim) # Rotary Positional Embedding for Key Heads
-
     single_layer_flops += value_head_flops(no_tokens, embedding_dim, value_heads)
-
     single_layer_flops += attention_mechanism_flops(no_tokens, embedding_dim, query_heads)
     single_layer_flops += softmax_flops(no_tokens, query_heads)
-
     single_layer_flops += softmax_values_flops(no_tokens, embedding_dim, query_heads)
     single_layer_flops += concatentation_flops(query_heads) # This is zero but included for completeness
+    single_layer_flops += linear_mixing_flops(no_tokens, embedding_dim) # Linear Mixing
 
-    # Linear Mixing
-    single_layer_flops += linear_mixing_flops(no_tokens, embedding_dim)
+    # Repeated simply to provide a summary metric/ statistic
+    single_attention_block_flops += query_head_flops(no_tokens, embedding_dim, query_heads)
+    single_attention_block_flops += rotary_positional_embedding_flops(no_tokens, embedding_dim) # Rotary Positional Embedding for Query Heads
+    single_attention_block_flops += key_head_flops(no_tokens, embedding_dim, key_heads)
+    single_attention_block_flops += rotary_positional_embedding_flops(no_tokens, embedding_dim) # Rotary Positional Embedding for Key Heads
+    single_attention_block_flops += value_head_flops(no_tokens, embedding_dim, value_heads)
+    single_attention_block_flops += attention_mechanism_flops(no_tokens, embedding_dim, query_heads)
+    single_attention_block_flops += softmax_flops(no_tokens, query_heads)
+    single_attention_block_flops += softmax_values_flops(no_tokens, embedding_dim, query_heads)
+    single_attention_block_flops += concatentation_flops(query_heads) # This is zero but included for completeness
+    single_attention_block_flops += linear_mixing_flops(no_tokens, embedding_dim) # Linear Mixing
 
+    # Outside of attention block
     single_layer_flops += residual_connection_flops(no_tokens, embedding_dim)
     single_layer_flops += rmsnorm_flops(no_tokens, embedding_dim)
+
+    # This is repeated to provide a summary metric/ statistic
+    other_flops += residual_connection_flops(no_tokens, embedding_dim)
+    other_flops += rmsnorm_flops(no_tokens, embedding_dim)
+    
     # MLP Layer
     single_layer_flops += mlp_flops(no_tokens, embedding_dim, mlp_hidden_dim)
     single_layer_flops += swiglu_flops(no_tokens, mlp_hidden_dim)
+
+    # Final Residaul Layer
     single_layer_flops += residual_connection_flops(no_tokens, embedding_dim)
+
+    # This is repeated to provide a summary metric/ statistic
+    other_flops += residual_connection_flops(no_tokens, embedding_dim)
+
+    # This is repeated to provide a summary metric/ statistic
+    single_mlp_flops += mlp_flops(no_tokens, embedding_dim, mlp_hidden_dim)
+    single_mlp_flops += swiglu_flops(no_tokens, mlp_hidden_dim)
+
     # If lora has been applied to the model we must also calculate the flops for this
 
     if lora_ranks != 0:
@@ -604,8 +640,11 @@ def forwards_pass_flops(no_tokens, lora_ranks, print_summary = False):
         
 
         # Print each row including the total sum
+        print(f"{'Single Attention Block':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in single_attention_block_flops) + f"{np.sum(single_attention_block_flops):.3g}".ljust(18))
+        print(f"{'Single MLP Block':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in single_mlp_flops) + f"{np.sum(single_mlp_flops):.3g}".ljust(18))
+        print(f"{'RMS, Residual etc':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in other_flops) + f"{np.sum(other_flops):.3g}".ljust(18))
         print(f"{'Single Transformer Layer':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in single_layer_flops) + f"{single_layer_total:.3g}".ljust(18))
-        print(f"{'LoRA in Single Layer':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in single_layer_lora_flops) + f"{single_layer_lora_total:.3g}".ljust(18))
+        print(f"{'LoRA cost in this Layer':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in single_layer_lora_flops) + f"{single_layer_lora_total:.3g}".ljust(18))
         print(f"{'Full Forward Pass':<35}" + " ".join(f"{v:.3g}".ljust(18) for v in total_flops) + f"{total_forward_pass:.3g}".ljust(18))
         
         # Overall total across all FLOPs
@@ -689,8 +728,7 @@ def model_training_flops(no_tokens, lora_ranks, batch_size, num_steps_training, 
 
     This is then repeated for each batch in the training set and for each training step. ie multiplied by.
 
-    Note:
-    -----
+    **Note**:
     Unlike generation, training does not require applying a softmax over the vocabulary.
     This is because training is typically based on raw logits and uses loss functions 
     like cross-entropy that apply softmax internally as part of the loss computation.
@@ -777,18 +815,17 @@ def model_evaluation_flops(no_tokens, lora_ranks, batch_size, print_summary = Tr
 
     return evaluation_flops, evaluation_lora_flops
 
-
-def flops_in_folder(results_folder="results", budget=1e17):
+def flops_in_folder(path="results", budget=1e17):
     """
-    Recursively searches through a folder and its subdirectories for JSON files,
-    accumulating training and evaluation FLOPs from the first occurrence of each unique filename.
+    Automatically detects if 'path' is a single JSON file or a folder containing JSON files,
+    and accumulates training and evaluation FLOPs accordingly.
 
     Parameters
     ----------
-    results_folder : str
-        Path to the folder containing the results JSON files.
+    path : str
+        Path to either a single JSON result file or a folder of such files.
     budget : float, optional
-        The total FLOP budget used for comparison in percentage calculation.
+        The total FLOP budget used for percentage calculation.
 
     Returns
     -------
@@ -802,18 +839,32 @@ def flops_in_folder(results_folder="results", budget=1e17):
     total_eval_cost = 0.0
     seen_filenames = set()
 
-    for root, _, files in os.walk(results_folder):
-        for filename in files:
-            if filename.endswith(".json") and filename not in seen_filenames:
-                seen_filenames.add(filename)
-                filepath = os.path.join(root, filename)
-                try:
-                    with open(filepath, "r") as f:
-                        data = json.load(f)
-                        total_training_flops += data.get("training_flops", 0.0)
-                        total_eval_cost += data.get("total_eval_cost", 0.0)
-                except Exception as e:
-                    print(f"Error reading {filepath}: {e}")
+    if os.path.isfile(path) and path.endswith(".json"):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+                total_training_flops += data.get("training_flops", 0.0)
+                total_eval_cost += data.get("total_eval_cost", 0.0)
+                seen_filenames.add(os.path.basename(path))
+        except Exception as e:
+            print(f"Error reading {path}: {e}")
+
+    elif os.path.isdir(path):
+        for root, _, files in os.walk(path):
+            for filename in files:
+                if filename.endswith(".json") and filename not in seen_filenames:
+                    seen_filenames.add(filename)
+                    filepath = os.path.join(root, filename)
+                    try:
+                        with open(filepath, "r") as f:
+                            data = json.load(f)
+                            total_training_flops += data.get("training_flops", 0.0)
+                            total_eval_cost += data.get("total_eval_cost", 0.0)
+                    except Exception as e:
+                        print(f"Error reading {filepath}: {e}")
+    else:
+        print("Provided path is not a valid .json file or directory.")
+        return {}
 
     combined_flops = total_training_flops + total_eval_cost
 

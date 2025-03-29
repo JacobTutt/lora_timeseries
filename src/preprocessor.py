@@ -23,7 +23,7 @@ def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fra
         Expected to include datasets named "trajectories" and "time".
 
     percentile : int, optional (default=90)
-        Percentile used to compute a scaling factor. Ensures `percentile`% of values fall in a compressed range.
+        Percentile used to compute a scaling factor. Ensures percentile% of values fall in a compressed range.
 
     decimal_places : int, optional (default=3)
         Number of decimal places to round the scaled values before encoding to string.
@@ -48,7 +48,7 @@ def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fra
     -------
     train_data : list of str
         List of encoded strings for training. Each string represents one trajectory in the format:
-        `"prey1,predator1;prey2,predator2;..."`
+        ``prey1,predator1;prey2,predator2;...``
 
     val_data : list of str
         List of encoded strings for validation.
@@ -156,7 +156,7 @@ def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fra
         represents one trajectory.
 
         The format for each string is:
-        `"prey_1,predator_1; prey_2,predator_2; ..."`
+        ``"prey_1,predator_1; prey_2,predator_2; ..."``
 
         Parameters:
         ----------
@@ -210,31 +210,49 @@ def preprocessor(prey_preditor_path, percentile= 90, decimal_places=3, train_fra
 
     ### This next part is purely for verification, and it does not return tokenised data
     if print_summary:
-        # This is stored in encoded data but dynamically generated for the display
-        numerical_string = ';'.join(encoded_data[0].split(';')[:5])
+        # Get string representations (first 5 tokens per sequence)
+        numerical_string_1 = ';'.join(encoded_data[0].split(';')[:5])
+        numerical_string_2 = ';'.join(encoded_data[1].split(';')[:5])
 
-        # Now import the tokeniser from the Qwen model if it is provided for display purposes
         if tokeniser_model is not None:
-            # This is simply to show the encoding of the data, it is not required for the function
-            encoded_data = tokeniser_model(numerical_string, return_tensors="pt")["input_ids"].tolist()[0]
+            # Tokenise the string snippets for inspection
+            encoded_data_1 = tokeniser_model(numerical_string_1, return_tensors="pt")["input_ids"].tolist()[0]
+            encoded_data_2 = tokeniser_model(numerical_string_2, return_tensors="pt")["input_ids"].tolist()[0]
 
-            # Print an example of the data encoding
-            log_message = (f"An example of the data encoding is shown below:\n"
-                        f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                        f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+            log_message = (
+                f"An example of the data encoding is shown below:\n\n"
+                f"Example 1:\n"
+                f"  Prey (raw):      {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                f"  Predator (raw):  {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n"
+            )
             if not shuffle:
-                log_message += f"After Encoding to String - First 5 Entries: {numerical_string}\n"
-            log_message += f"After Encoding to Tokenised: {encoded_data}"
+                log_message += (
+                    f"  String:          {numerical_string_1}\n"
+                    f"  Tokenised:       {encoded_data_1}\n"
+                )
+
+            log_message += (
+                f"\nExample 2:\n"
+                f"  Prey (raw):      {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[1, :5, 0]]}\n"
+                f"  Predator (raw):  {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[1, :5, 1]]}\n"
+            )
+            if not shuffle:
+                log_message += (
+                    f"  String:          {numerical_string_2}\n"
+                    f"  Tokenised:       {encoded_data_2}"
+                )
+
             logging.info(log_message)
 
-            
-        else: 
-            # Print an example of the data encoding
-            log_message = (f"An example of the data encoding is shown below:\n"
-                        f"Before Encoding - First 5 Prey Data: {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
-                        f"Before Encoding - First 5 Predator Data: {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n")
+        else:
+            # Fallback if tokenizer isn't available
+            log_message = (
+                f"An example of the data encoding is shown below (no tokeniser available):\n"
+                f"Prey (raw):      {[f'{prey:.{decimal_places}f}' for prey in scaled_trajectories[0, :5, 0]]}\n"
+                f"Predator (raw):  {[f'{predator:.{decimal_places}f}' for predator in scaled_trajectories[0, :5, 1]]}\n"
+            )
             if not shuffle:
-                log_message += f"After Encoding to String - First 5 Entries: {numerical_string}"
+                log_message += f"String:          {numerical_string_1}"
             logging.info(log_message)
 
     return train_data, val_data, test_data

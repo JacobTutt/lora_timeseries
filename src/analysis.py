@@ -252,7 +252,7 @@ def exponential_moving_average(values, beta):
         smoothed.append(corrected_avg)
     return np.array(smoothed)
 
-def hyperparam_analysis(file_paths, labels, ema_beta=0.9, bar_chart = False):
+def hyperparam_analysis(file_paths, labels, ema_beta=0.9, bar_chart = False, log_scale = False):
     """
     Compares hyperparameter runs by plotting training/validation losses and showing performance summary.
 
@@ -303,7 +303,7 @@ def hyperparam_analysis(file_paths, labels, ema_beta=0.9, bar_chart = False):
         ax_train.plot(train_steps, smoothed_train, color=color, linewidth=linewidth)
 
         # ---- Validation Plot ----
-        ax_val.plot(val_steps, val_loss, label=label, color=color, linestyle="--", linewidth=linewidth)
+        ax_val.plot(val_steps, val_loss, label=f"{label} (Final Val Loss: {final_val_loss:.4f})", color=color, linestyle="--", linewidth=linewidth)
 
         # Collect for final summary table
         final_val_losses.append(final_val_loss)
@@ -318,18 +318,27 @@ def hyperparam_analysis(file_paths, labels, ema_beta=0.9, bar_chart = False):
     # ---- Formatting Training Plot ----
     ax_train.set_title("Training Loss", fontsize=titlesize)
     ax_train.set_xlabel("Step", fontsize=labelsize)
-    ax_train.set_ylabel("Cross Entropy Loss", fontsize=labelsize)
+    if log_scale:
+        ax_train.set_ylabel("Log Cross Entropy Loss", fontsize=labelsize)
+    else:
+        ax_train.set_ylabel("Cross Entropy Loss", fontsize=labelsize)
     ax_train.tick_params(labelsize=ticksize)
     ax_train.grid(True, linestyle="--", alpha=0.6)
-    ax_train.legend(fontsize=10)
+    ax_train.legend(fontsize=10, loc = "upper right")
+    if log_scale:
+        ax_train.set_yscale('log')
 
     # ---- Formatting Validation Plot ----
+
     ax_val.set_title("Validation Loss", fontsize=titlesize)
+
     ax_val.set_xlabel("Step", fontsize=labelsize)
 
     ax_val.tick_params(labelsize=ticksize)
     ax_val.grid(True, linestyle="--", alpha=0.6)
-    ax_val.legend(fontsize=10)
+    ax_val.legend(fontsize=10, loc = "upper right")
+    if log_scale:
+        ax_val.set_yscale('log')
 
     fig.tight_layout()
     plt.show()
@@ -352,7 +361,7 @@ def hyperparam_analysis(file_paths, labels, ema_beta=0.9, bar_chart = False):
 
 
 
-def model_train_plot(train_step_tracker, train_loss_tracker, val_step_tracker, val_loss_tracker, val_loss_final, early_stopping_step=None, ema_beta=0.9):
+def model_train_plot(train_step_tracker, train_loss_tracker, val_step_tracker, val_loss_tracker, val_loss_final, early_stopping_step=None, ema_beta=0.9, log_scale = False):
     """
     Plot the training and validation loss curves over training steps with optional exponential moving average smoothing.
 
@@ -417,7 +426,8 @@ def model_train_plot(train_step_tracker, train_loss_tracker, val_step_tracker, v
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     plt.xlim(left=0)
-
+    if log_scale:
+        plt.yscale('log')
     # Grid
     plt.grid(True, linestyle='--', linewidth=0.6, alpha=0.7)
 
@@ -631,6 +641,8 @@ def plot_model_errors_compare(prey_original_trained, predator_original_trained, 
         summarizing each metric per timestep with standard error and percentage
         improvement from the untrained to the trained model.
     """
+
+
     def compute_metrics(true, pred):
         err = true - pred
         abs_err = np.abs(err)
