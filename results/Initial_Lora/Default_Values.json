@@ -1679,6 +1679,6 @@
     "val_loss_final": 0.9293942031264305,
     "training_flops": 5796416375040000.0,
     "total_eval_cost": 359257056578000.0,
-    "early_stopping_step": null,
+    "early_stopping_step": 800,
     "stopping_reason": "max_steps"
 }
