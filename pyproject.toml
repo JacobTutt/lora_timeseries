@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-timeseries-forecasting"
+version = "0.1.0"
+description = "LoRA adaption of Qwen2.5-0.5B model for time series forecasting"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Jacob Tutt", email = "jacobtutt@icloud.com" }
+]
+dependencies = [
+  "transformers",
+  "torch",
+  "accelerate",
+  "tqdm",
+  "numpy",
+  "h5py",
+  "jupyter",
+  "ipykernel",
+  "torchinfo",
+  "wandb",
+  "matplotlib",
+  "ipython",
+  "pandas"
+]
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["src"]
+
+
+[tool.sphinx]
+source-dir = "docs/"
+build-dir = "docs/_build"

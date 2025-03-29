@@ -1,0 +1,26 @@
+# This gives an example of what was used for the hyperparameter tuning along a single axis. 
+# I investigated the axis, decimal places, learn_rate, lora_rank and ba
+
+method: grid
+
+metric:
+  name: val_loss
+  goal: minimize
+
+parameters:
+  learn_rate:
+    values: [1e-5, 5e-5, 1e-4]
+  lora_rank:
+    values: [4]
+  token_length:
+    values: 256
+  max_steps:
+    value: 500
+  batch_size:
+    value: 4
+  decimal_places:
+    value: 3
+  subset:
+    value: 25
+  eval_freq:
+    value: 25
