@@ -1,8 +1,8 @@
-# [LoRA for Time Series Analysis with LLMs](https://coursework-m2.readthedocs.io/en/latest/)
+# [LoRA for Time Series Analysis with LLMs](https://lora-timeseries.readthedocs.io/en/latest/)
 
 - This repository contains the full pipeline used to preform the evaluation, training, generation and hyperparameter tuning.
 - Results were achieved by submitting jobs to a HPC and storing results and metric through .json files and using weights and biases (wandb)
-- Documentation is avaliable: [here](https://coursework-m2.readthedocs.io/en/latest/)
+- Documentation is avaliable: [here](https://lora-timeseries.readthedocs.io/en/latest/)
 
 ## Pipleine (`src`)
 ### `Preprocessor` 

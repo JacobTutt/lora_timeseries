@@ -1,5 +1,5 @@
-M2 Coursework Documentation
-===========================
+LoRA for Time Series Analysis with LLMs
+=======================================
 
 .. toctree::
    :maxdepth: 2
