@@ -100,7 +100,7 @@ This project is licensed under the [MIT License](https://opensource.org/license/
 
 ## Support
 If you have any questions, run into issues, or just want to discuss the project, feel free to:
-- Open an issue on the [GitHub Issues](https://github.com/JacobTutt/stat_frequentist_analysis/issues) page.  
+- Open an issue on the [GitHub Issues](https://github.com/JacobTutt/antikythera_bayesian_analysis/issues) page.  
 - Reach out to me directly via [email](mailto:jacobtutt@icloud.com).
 
 ## Author
