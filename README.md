@@ -1,4 +1,4 @@
-# **LoRA for Time Series Analysis with LLMs**
+# **Low-Rank Adaptation of LLMs for Modeling Coupled Dynamical Systems**
 
 ## Author: Jacob Tutt, Department of Physics, University of Cambridge
 
